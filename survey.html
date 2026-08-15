@@ -211,9 +211,40 @@
 
   <form id="surveyForm" novalidate>
 
-    <!-- ส่วนที่ 1 : ข้อมูลผู้ตอบ -->
+    <!-- ส่วนที่ 1 : เลือกเมนู -->
     <div class="card">
-      <h2><span class="step">1</span> ข้อมูลผู้ตอบแบบสอบถาม</h2>
+      <h2><span class="step">1</span> เมนูที่ท่านได้รับประทาน</h2>
+      <p class="hint" style="margin-top:-6px;margin-bottom:14px">เลือกได้มากกว่า 1 เมนู — ระบบจะให้ประเมินเฉพาะเมนูที่ท่านเลือกเท่านั้น</p>
+      <div class="menu-pick" id="menuPick"><!-- js render --></div>
+    </div>
+
+    <!-- ส่วนที่ 2 : ให้คะแนน -->
+    <div class="card" id="ratingCard">
+      <h2><span class="step">2</span> ประเมินความพึงพอใจรายเมนู</h2>
+      <p class="hint" style="margin-top:-6px;margin-bottom:14px">สเกลคะแนน 1 = น้อยที่สุด ถึง 5 = มากที่สุด</p>
+      <div id="ratingArea">
+        <p class="empty" id="ratingEmpty">กรุณาเลือกเมนูที่รับประทานในข้อ 1 ก่อน</p>
+      </div>
+    </div>
+
+    <!-- ส่วนที่ 3 : ภาพรวม + ข้อเสนอแนะ -->
+    <div class="card">
+      <h2><span class="step">3</span> ความพึงพอใจโดยรวม และข้อเสนอแนะ</h2>
+      <div class="rate-row">
+        <div class="lab">ความพึงพอใจโดยรวมต่อมื้อนี้ <span class="req">*</span></div>
+        <div class="scale" id="overallScale"><!-- js render --></div>
+      </div>
+      <div class="field" style="margin-top:18px">
+        <label for="recommendation">Recommendation — ข้อเสนอแนะ / สิ่งที่อยากให้ปรับปรุง</label>
+        <textarea id="recommendation" name="recommendation" placeholder="เช่น อยากให้กิมจิเปรี้ยวขึ้นอีกนิด หรือเพิ่มปริมาณเนื้อหมู..."></textarea>
+        <p class="hint">ไม่บังคับตอบ แต่ความเห็นของท่านมีค่ามากสำหรับเรา</p>
+      </div>
+    </div>
+
+    <!-- ส่วนที่ 4 : ข้อมูลผู้ตอบ -->
+    <div class="card">
+      <h2><span class="step">4</span> ข้อมูลผู้ตอบแบบสอบถาม</h2>
+      <p class="hint" style="margin-top:-6px;margin-bottom:14px">ข้อมูลส่วนนี้ใช้สำหรับการวิเคราะห์ผลในภาพรวมเท่านั้น</p>
       <div class="grid">
         <div class="field">
           <label for="firstName">ชื่อ <span class="req">*</span></label>
@@ -237,36 +268,6 @@
             <option value="ไม่ระบุ">ไม่ระบุ</option>
           </select>
         </div>
-      </div>
-    </div>
-
-    <!-- ส่วนที่ 2 : เลือกเมนู -->
-    <div class="card">
-      <h2><span class="step">2</span> เมนูที่ท่านได้รับประทาน</h2>
-      <p class="hint" style="margin-top:-6px;margin-bottom:14px">เลือกได้มากกว่า 1 เมนู — ระบบจะให้ประเมินเฉพาะเมนูที่ท่านเลือกเท่านั้น</p>
-      <div class="menu-pick" id="menuPick"><!-- js render --></div>
-    </div>
-
-    <!-- ส่วนที่ 3 : ให้คะแนน -->
-    <div class="card" id="ratingCard">
-      <h2><span class="step">3</span> ประเมินความพึงพอใจรายเมนู</h2>
-      <p class="hint" style="margin-top:-6px;margin-bottom:14px">สเกลคะแนน 1 = น้อยที่สุด ถึง 5 = มากที่สุด</p>
-      <div id="ratingArea">
-        <p class="empty" id="ratingEmpty">กรุณาเลือกเมนูที่รับประทานในข้อ 2 ก่อน</p>
-      </div>
-    </div>
-
-    <!-- ส่วนที่ 4 : ภาพรวม + ข้อเสนอแนะ -->
-    <div class="card">
-      <h2><span class="step">4</span> ความพึงพอใจโดยรวม และข้อเสนอแนะ</h2>
-      <div class="rate-row">
-        <div class="lab">ความพึงพอใจโดยรวมต่อมื้อนี้ <span class="req">*</span></div>
-        <div class="scale" id="overallScale"><!-- js render --></div>
-      </div>
-      <div class="field" style="margin-top:18px">
-        <label for="recommendation">Recommendation — ข้อเสนอแนะ / สิ่งที่อยากให้ปรับปรุง</label>
-        <textarea id="recommendation" name="recommendation" placeholder="เช่น อยากให้กิมจิเปรี้ยวขึ้นอีกนิด หรือเพิ่มปริมาณเนื้อหมู..."></textarea>
-        <p class="hint">ไม่บังคับตอบ แต่ความเห็นของท่านมีค่ามากสำหรับเรา</p>
       </div>
     </div>
 
@@ -487,7 +488,7 @@ function buildRatings(){
   document.querySelectorAll('#ratingArea input:checked').forEach(i=>keep[i.name]=i.value);
 
   if(!sel.length){
-    area.innerHTML = '<p class="empty" id="ratingEmpty">กรุณาเลือกเมนูที่รับประทานในข้อ 2 ก่อน</p>';
+    area.innerHTML = '<p class="empty" id="ratingEmpty">กรุณาเลือกเมนูที่รับประทานในข้อ 1 ก่อน</p>';
     return;
   }
   area.innerHTML = sel.map(id=>{
@@ -541,10 +542,7 @@ document.getElementById('surveyForm').addEventListener('submit', async e=>{
   const menus     = selectedMenus();
   const errs      = [];
 
-  if(!firstName){ errs.push('กรุณากรอกชื่อ'); g('firstName').classList.add('invalid'); }
-  if(!lastName){  errs.push('กรุณากรอกนามสกุล'); g('lastName').classList.add('invalid'); }
-  if(!age || +age < 1 || +age > 120){ errs.push('กรุณากรอกอายุระหว่าง 1-120 ปี'); g('age').classList.add('invalid'); }
-  if(!gender){ errs.push('กรุณาเลือกเพศ'); g('gender').classList.add('invalid'); }
+  // ตรวจตามลำดับข้อในแบบสอบถาม: เมนู -> คะแนน -> ภาพรวม -> ข้อมูลผู้ตอบ
   if(!menus.length){ errs.push('กรุณาเลือกเมนูที่ท่านได้รับประทานอย่างน้อย 1 เมนู'); }
 
   const ratings = {};
@@ -567,6 +565,11 @@ document.getElementById('surveyForm').addEventListener('submit', async e=>{
     errs.push('กรุณาให้คะแนนความพึงพอใจโดยรวม');
     document.getElementById('overallScale').classList.add('invalid');
   }
+
+  if(!firstName){ errs.push('กรุณากรอกชื่อ'); g('firstName').classList.add('invalid'); }
+  if(!lastName){  errs.push('กรุณากรอกนามสกุล'); g('lastName').classList.add('invalid'); }
+  if(!age || +age < 1 || +age > 120){ errs.push('กรุณากรอกอายุระหว่าง 1-120 ปี'); g('age').classList.add('invalid'); }
+  if(!gender){ errs.push('กรุณาเลือกเพศ'); g('gender').classList.add('invalid'); }
 
   if(errs.length){
     showError('<b>กรุณาตรวจสอบข้อมูลอีกครั้ง</b><br>• ' + errs.join('<br>• '));

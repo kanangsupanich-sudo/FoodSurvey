@@ -340,6 +340,7 @@
   <div class="card">
     <h2>📋 คำตอบทั้งหมด</h2>
     <div class="toolbar">
+      <button class="btn ghost sm" onclick="renderAdmin()">🔄 รีเฟรชข้อมูล</button>
       <button class="btn green sm" onclick="exportCSV()">⬇ Export CSV (Excel)</button>
       <span class="sp"></span>
       <button class="btn danger sm" onclick="resetAll()">🗑 ลบข้อมูลทั้งหมด</button>
@@ -355,8 +356,7 @@
    ========================================================================== */
 
 // บัญชีผู้ดูแลระบบ (เปลี่ยนรหัสผ่านได้ที่บรรทัดนี้)
-const ADMIN_USER = 'admin';
-const ADMIN_PASS = 'ddmc2026';
+// (ย้ายไปตั้งค่าที่เซิร์ฟเวอร์แล้ว — ดู ADMIN_USER / ADMIN_PASSWORD ใน Variables ของ Railway)
 
 // รายการเมนู  (เพิ่ม/แก้ชื่อเมนูได้ที่นี่ — ระบบจะสร้างฟอร์มและกราฟให้อัตโนมัติ)
 const MENUS = [
@@ -372,30 +372,47 @@ const CRITERIA = [
   { id:'cleanliness', name:'ความสะอาด' }
 ];
 
-const STORE_KEY = 'ddmc_food_survey_v1';
-
 /* ==========================================================================
-   จัดการข้อมูล (localStorage)
+   จัดการข้อมูล — เรียก API ที่เก็บลง PostgreSQL
    ========================================================================== */
-function loadData(){
-  try { return JSON.parse(localStorage.getItem(STORE_KEY)) || []; }
-  catch(e){ return []; }
+let CACHE = [];                 // คำตอบล่าสุดที่ดึงมาจากฐานข้อมูล
+
+// เก็บ token ของผู้ดูแล (sessionStorage ถ้าใช้ได้ ไม่ได้ก็เก็บในหน่วยความจำ)
+function getToken(){ try { return sessionStorage.getItem('ddmc_token') || window.__token || ''; } catch(e){ return window.__token || ''; } }
+function setToken(t){
+  window.__token = t || '';
+  try { t ? sessionStorage.setItem('ddmc_token', t) : sessionStorage.removeItem('ddmc_token'); } catch(e){}
 }
-function saveData(rows){
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(rows)); return true; }
-  catch(e){
-    alert('ไม่สามารถบันทึกข้อมูลได้ (เบราว์เซอร์ปิดการใช้งานพื้นที่จัดเก็บข้อมูล)\n' +
-          'กรุณาเปิดไฟล์นี้โดยตรงจากเครื่อง และไม่ใช้โหมดไม่ระบุตัวตน (Incognito)');
-    return false;
+function isLoggedIn(){ return !!getToken(); }
+
+async function api(method, path, body){
+  const opt = { method, headers:{} };
+  if(body){ opt.headers['Content-Type']='application/json'; opt.body = JSON.stringify(body); }
+  const tk = getToken();
+  if(tk) opt.headers['Authorization'] = 'Bearer ' + tk;
+
+  let res;
+  try { res = await fetch(path, opt); }
+  catch(e){ throw new Error('ติดต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่'); }
+
+  let data = {};
+  try { data = await res.json(); } catch(e){}
+  if(!res.ok){
+    if(res.status === 401 && path.startsWith('/api/admin/') && path !== '/api/admin/login'){
+      setToken('');                                   // เซสชันหมดอายุ -> เด้งกลับหน้า login
+    }
+    throw new Error(data.error || ('เกิดข้อผิดพลาด (HTTP ' + res.status + ')'));
   }
+  return data;
 }
 
-// สถานะการล็อกอินของผู้ดูแล (ห่อ try/catch กันเบราว์เซอร์ที่ปิด storage)
-function isLoggedIn(){ try { return sessionStorage.getItem('ddmc_admin')==='1'; } catch(e){ return !!window.__adminSession; } }
-function setLoggedIn(v){
-  window.__adminSession = v;
-  try { v ? sessionStorage.setItem('ddmc_admin','1') : sessionStorage.removeItem('ddmc_admin'); } catch(e){}
+// ดึงคำตอบทั้งหมดจากฐานข้อมูลมาเก็บใน CACHE
+async function fetchResponses(){
+  const d = await api('GET', '/api/admin/responses');
+  CACHE = d.rows || [];
+  return CACHE;
 }
+function loadData(){ return CACHE; }               // ใช้ร่วมกับส่วนแสดงผลเดิม
 
 /* ==========================================================================
    สลับหน้า
@@ -407,12 +424,18 @@ function showView(name){
   document.getElementById('navBtn').classList.toggle('hidden', name==='admin');
   window.scrollTo(0,0);
 }
-function goAdmin(){
-  if(isLoggedIn()){ renderAdmin(); showView('admin'); }
-  else { document.getElementById('loginError').classList.add('hidden'); showView('login'); }
+async function goAdmin(){
+  if(isLoggedIn()){
+    showView('admin');
+    await renderAdmin();
+  } else {
+    document.getElementById('loginError').classList.add('hidden');
+    showView('login');
+  }
 }
 function logout(){
-  setLoggedIn(false);
+  setToken('');
+  CACHE = [];
   document.getElementById('adminUser').value='';
   document.getElementById('adminPass').value='';
   showView('survey');
@@ -505,7 +528,7 @@ function showError(msg){
   box.scrollIntoView({behavior:'smooth', block:'center'});
 }
 
-document.getElementById('surveyForm').addEventListener('submit', e=>{
+document.getElementById('surveyForm').addEventListener('submit', async e=>{
   e.preventDefault();
   document.getElementById('formError').classList.add('hidden');
   document.querySelectorAll('.invalid').forEach(el=>el.classList.remove('invalid'));
@@ -550,16 +573,23 @@ document.getElementById('surveyForm').addEventListener('submit', e=>{
     return;
   }
 
-  const rows = loadData();
-  rows.push({
-    id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
-    ts: new Date().toISOString(),
-    firstName, lastName, age:+age, gender,
-    menus, ratings,
-    overall: +overallEl.value,
-    recommendation: g('recommendation').value.trim()
-  });
-  if(saveData(rows)) showView('thanks');
+  // ส่งขึ้นฐานข้อมูล
+  const btn = e.target.querySelector('button[type=submit]');
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+  try {
+    await api('POST', '/api/responses', {
+      firstName, lastName, age:+age, gender,
+      ratings,
+      overall: +overallEl.value,
+      recommendation: g('recommendation').value.trim()
+    });
+    showView('thanks');
+  } catch(err){
+    showError('<b>บันทึกไม่สำเร็จ</b><br>' + esc(err.message));
+  } finally {
+    btn.disabled = false; btn.textContent = label;
+  }
 });
 
 function resetForm(){
@@ -577,19 +607,26 @@ function newResponse(){ resetForm(); showView('survey'); }
 /* ==========================================================================
    ADMIN : เข้าสู่ระบบ
    ========================================================================== */
-document.getElementById('loginForm').addEventListener('submit', e=>{
+document.getElementById('loginForm').addEventListener('submit', async e=>{
   e.preventDefault();
+  const box = document.getElementById('loginError');
+  const btn = e.target.querySelector('button[type=submit]');
   const u = document.getElementById('adminUser').value.trim();
   const p = document.getElementById('adminPass').value;
-  if(u === ADMIN_USER && p === ADMIN_PASS){
-    setLoggedIn(true);
+
+  box.classList.add('hidden');
+  btn.disabled = true; btn.textContent = 'กำลังตรวจสอบ...';
+  try {
+    const d = await api('POST', '/api/admin/login', { username:u, password:p });
+    setToken(d.token);
     document.getElementById('adminPass').value='';
-    renderAdmin();
     showView('admin');
-  }else{
-    const box = document.getElementById('loginError');
-    box.textContent = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
+    await renderAdmin();
+  } catch(err){
+    box.textContent = err.message;
     box.classList.remove('hidden');
+  } finally {
+    btn.disabled = false; btn.textContent = 'เข้าสู่ระบบ';
   }
 });
 
@@ -601,8 +638,17 @@ const fmtDate = iso => new Date(iso).toLocaleString('th-TH',
 const avg = a => a.length ? a.reduce((s,x)=>s+x,0)/a.length : null;
 const show1 = v => v===null ? '-' : v.toFixed(2);
 
-function renderAdmin(){
-  const rows = loadData();
+async function renderAdmin(){
+  const area = document.getElementById('tableArea');
+  area.innerHTML = '<p class="empty">กำลังโหลดข้อมูลจากฐานข้อมูล...</p>';
+  let rows;
+  try {
+    rows = await fetchResponses();
+  } catch(err){
+    area.innerHTML = '<p class="empty">โหลดข้อมูลไม่สำเร็จ — ' + esc(err.message) + '</p>';
+    if(!isLoggedIn()){ showView('login'); }        // เซสชันหมดอายุ
+    return;
+  }
   renderStats(rows);
   renderChart(rows);
   renderDemo(rows);
@@ -724,7 +770,7 @@ function renderTable(rows){
       ${cells}
       <td class="num"><b>${r.overall}</b></td>
       <td>${r.recommendation ? esc(r.recommendation) : '<span style="color:#bbb">–</span>'}</td>
-      <td class="num"><button class="btn danger sm" onclick="delRow('${r.id}')">ลบ</button></td>
+      <td class="num"><button class="btn danger sm" onclick="delRow(${Number(r.id)})">ลบ</button></td>
     </tr>`;
   }).join('');
   area.innerHTML = `<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
@@ -734,24 +780,27 @@ function esc(s){
   return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-function delRow(id){
-  const rows = loadData();
-  const r = rows.find(x=>x.id===id);
+async function delRow(id){
+  const r = loadData().find(x=>Number(x.id)===Number(id));
   if(!r) return;
   if(!confirm(`ต้องการลบคำตอบของ "${r.firstName} ${r.lastName}" ใช่หรือไม่?\nการลบไม่สามารถย้อนกลับได้`)) return;
-  saveData(rows.filter(x=>x.id!==id));
-  renderAdmin();
+  try {
+    await api('DELETE', '/api/admin/responses/' + Number(id));
+    await renderAdmin();
+  } catch(err){ alert('ลบไม่สำเร็จ — ' + err.message); }
 }
 
-function resetAll(){
+async function resetAll(){
   const rows = loadData();
   if(!rows.length){ alert('ยังไม่มีข้อมูลให้ลบ'); return; }
   if(!confirm(`ต้องการลบข้อมูลทั้งหมด ${rows.length} รายการใช่หรือไม่?\nการลบไม่สามารถย้อนกลับได้ — แนะนำให้ Export CSV เก็บไว้ก่อน`)) return;
   const t = prompt('เพื่อยืนยัน กรุณาพิมพ์คำว่า  ลบทั้งหมด');
   if(t !== 'ลบทั้งหมด'){ alert('ยกเลิกการลบข้อมูล'); return; }
-  saveData([]);
-  renderAdmin();
-  alert('ลบข้อมูลทั้งหมดเรียบร้อยแล้ว');
+  try {
+    const d = await api('DELETE', '/api/admin/responses');
+    await renderAdmin();
+    alert(`ลบข้อมูลทั้งหมดเรียบร้อยแล้ว (${d.deleted} รายการ)`);
+  } catch(err){ alert('ลบไม่สำเร็จ — ' + err.message); }
 }
 
 /* ==========================================================================

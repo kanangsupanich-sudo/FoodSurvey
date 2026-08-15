@@ -1,0 +1,13 @@
+{
+  "name": "ddmc-food-survey",
+  "version": "1.0.0",
+  "private": true,
+  "description": "แบบสอบถามความพึงพอใจของเมนูที่รับประทาน (DDMC)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
